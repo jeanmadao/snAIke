@@ -22,9 +22,9 @@ python main.py
 ## Controls
 
  - `o`: Expand the grid by one row
- - `i`: Expand the grid by one column
- - `o`: Shrink the grid by one row
- - `o`: Shrink the grid by one column
+ - `p`: Expand the grid by one column
+ - `l`: Shrink the grid by one row
+ - `;`: Shrink the grid by one column
  - `u`: Slow down the movement of the snake
  - `i`: Speed up the movement of the snake
  - `space`: Start the game
