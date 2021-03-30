@@ -17,7 +17,7 @@ EMPTY_CHAR = ' '
 WALL_CHAR = '#'
 FOOD_CHAR = '@'
 
-class Game:
+class SnakeGame:
     def __init__(self):
         self.run = True
         self.rows = 20
@@ -149,9 +149,14 @@ class Game:
     def is_collision(self, pos):
         return not (0 <= pos[0] < self.rows and 0 <= pos[1] < self.columns and self.grid[pos[0]][pos[1]] in [EMPTY_CHAR, FOOD_CHAR])
 
+    def is_next_move_invalid(self):
+        if self.previous_move is not None:
+           return (self.previous_move[0] + self.next_move[0], self.previous_move[1] + self.next_move[1]) == (0, 0)
+
     def move_snake(self):
-        if self.next_move is None or (self.previous_move is not None and (self.previous_move[0] + self.next_move[0], self.previous_move[1] + self.next_move[1]) == (0, 0)):
+        if self.next_move is None or self.is_next_move_invalid():
             self.next_move = self.previous_move
+
         if self.next_move is not None:
             head = self.snake[0]
             new_pos = (head[0] + self.next_move[0], head[1] + self.next_move[1])
@@ -171,6 +176,11 @@ class Game:
                 self.previous_move = self.next_move
                 self.next_move = None
 
+            return self.get_state()
+
+    def get_state(self):
+        return self.grid, self.score, self.alive
+
     def get_grid_base(self, width, height):
         menu_start = width * 2/3
         vertical_gap = (height - 1) // self.rows
@@ -178,7 +188,6 @@ class Game:
         gap = min(horizontal_gap, vertical_gap)
         vertical_start = (height - self.rows * gap) // 2
         horizontal_start = (menu_start - self.columns * gap) // 2
-        start = min(horizontal_start, vertical_start)
         return gap, vertical_start, horizontal_start, menu_start
 
     def get_coord(self, screen, pos):
@@ -188,19 +197,115 @@ class Game:
         j = int((x - horizontal_start) // gap)
         return i, j
 
-    def add_wall(self, screen, pos):
-        i, j = self.get_coord(screen, pos)
+    def add_wall(self, pos):
+        i, j = self.get_coord(self.screen, pos)
         if 0 <= i < self.rows and 0 <= j < self.columns:
             self.grid[i][j] = WALL_CHAR
         self.score = 0
         self.best_score = 0
 
-    def remove(self, screen, pos):
-        i, j = self.get_coord(screen, pos)
+    def remove(self, pos):
+        i, j = self.get_coord(self.screen, pos)
         if 0 <= i < self.rows and 0 <= j < self.columns:
             self.grid[i][j] = EMPTY_CHAR
         self.score = 0
         self.best_score = 0
+
+class GUISnakeGame(SnakeGame):
+    DEFAULT_WIDTH = 900
+    DEFAULT_HEIGHT = 600
+    DEFAULT_TITLE_FONT_SIZE = 40
+    DEFAULT_FONT_SIZE = 20
+
+    def __init__(self):
+        super(GUISnakeGame, self).__init__()
+        self.frame = 0
+
+    def next_tick(self, learning_agent=None):
+        self.process_event(learning_agent)
+        if self.is_alive() and (self.frame / FPS >= 1 / self.get_mps() or learning_agent is not None):
+            self.move_snake()
+            self.frame = 0
+        # drawing on screen
+        self.draw()
+        self.clock.tick(FPS)
+        self.frame += 1
+
+    def process_event(self, learning_agent=None):
+        # triggering an event
+        for event in pygame.event.get():
+            # closing the game
+            if event.type == pygame.QUIT:
+                self.stop_running()
+            elif event.type == pygame.KEYDOWN:
+                if not self.is_alive():
+                    # start the run
+                    if event.key == pygame.K_SPACE:
+                        self.start_run()
+
+                    # modify speed
+                    elif event.key == pygame.K_u:
+                        self.slowdown()
+                    elif event.key == pygame.K_i:
+                        self.speedup()
+
+                    # modify grid
+                    elif event.key == pygame.K_r:
+                        self.reset_grid()
+                    elif event.key == pygame.K_o:
+                        self.expand_row()
+                    elif event.key == pygame.K_p:
+                        self.expand_column()
+                    elif event.key == pygame.K_l:
+                        self.shrink_row()
+                    elif event.key == pygame.K_SEMICOLON:
+                        self.shrink_column()
+
+                if self.is_alive():
+                    # controls snake
+                    if event.key == pygame.K_UP:
+                        self.set_next_move(UP)
+                    elif event.key == pygame.K_RIGHT:
+                        self.set_next_move(RIGHT)
+                    elif event.key == pygame.K_DOWN:
+                        self.set_next_move(DOWN)
+                    elif event.key == pygame.K_LEFT:
+                        self.set_next_move(LEFT)
+
+            # resize window
+            elif event.type == pygame.VIDEORESIZE:
+                self.set_window_size(event.w, event.h)
+
+            if not self.is_alive():
+                # left click
+                if pygame.mouse.get_pressed()[0]:
+                    pos = pygame.mouse.get_pos()
+                    self.add_wall(pos)
+                # right click
+                if pygame.mouse.get_pressed()[2]:
+                    pos = pygame.mouse.get_pos()
+                    self.remove(pos)
+
+        if self.is_alive() and learning_agent is not None:
+            self.set_next_move(learning_agent.chose_next_move(self.get_state()))
+
+    def init_pygame(self):
+        pygame.init()
+        pygame.font.init()
+
+        self.set_window_size(GUISnakeGame.DEFAULT_WIDTH, GUISnakeGame.DEFAULT_HEIGHT)
+        pygame.display.set_caption(TITLE)
+        self.clock = pygame.time.Clock()
+
+    def set_window_size(self, width, height):
+        self.screen = pygame.display.set_mode(size=(width, height), flags=pygame.RESIZABLE)
+        ratio = min(width / GUISnakeGame.DEFAULT_WIDTH, height / GUISnakeGame.DEFAULT_HEIGHT)
+        self.title_font = pygame.font.Font('./Fonts/Mario-Kart-DS.ttf', round(GUISnakeGame.DEFAULT_TITLE_FONT_SIZE * ratio))
+        self.normal_font = pygame.font.Font('./Fonts/Fipps-Regular.otf', round(GUISnakeGame.DEFAULT_FONT_SIZE * ratio))
+
+    def cleanup_pygame(self):
+        pygame.font.quit()
+        pygame.quit()
 
     def draw_cells(self, screen, gap, vertical_start, horizontal_start):
         for i in range(self.rows):
@@ -214,120 +319,91 @@ class Game:
                         color = RED
                     pygame.draw.rect(screen, color, (horizontal_start + j * gap, vertical_start + i * gap, gap, gap))
 
-
     def draw_grid(self, screen, gap, vertical_start, horizontal_start):
         for i in range(self.rows + 1):
             pygame.draw.line(screen, GREY, (horizontal_start, vertical_start + i * gap), (horizontal_start + self.columns * gap, vertical_start + i * gap), 1)
         for j in range(self.columns + 1):
             pygame.draw.line(screen, GREY, (horizontal_start + j * gap, vertical_start), (horizontal_start + j * gap, vertical_start + self.rows * gap), 1)
 
-    def draw(self, screen, title_font, normal_font):
-        screen.fill(BLACK)
-        width, height = screen.get_size()
+    def draw(self):
+        self.screen.fill(BLACK)
+        width, height = self.screen.get_size()
         gap, vertical_start, horizontal_start, menu_start = self.get_grid_base(width, height)
-        self.draw_cells(screen, gap, vertical_start, horizontal_start)
-        self.draw_grid(screen, gap, vertical_start, horizontal_start)
-        pygame.draw.line(screen, GREY, (menu_start, 0), (menu_start, height))
-        title = title_font.render(TITLE, True, WHITE)
-        score = normal_font.render('Score: ' + str(self.score), True, WHITE)
-        highscore = normal_font.render('Highscore: ' + str(self.best_score), True, WHITE)
-        size = normal_font.render('Size: ' + str(self.rows) + 'x' + str(self.columns), True, WHITE)
-        mps = normal_font.render('MPS: ' + str(self.mps), True, WHITE)
-        start = title_font.render('Press Space', True, WHITE)
+
+        # Draw the map
+        self.draw_cells(self.screen, gap, vertical_start, horizontal_start)
+        self.draw_grid(self.screen, gap, vertical_start, horizontal_start)
+        pygame.draw.line(self.screen, GREY, (menu_start, 0), (menu_start, height))
+
+        # Draw texts and timer
+        title = self.title_font.render(TITLE, True, WHITE)
+        score = self.normal_font.render('Score: ' + str(self.score), True, WHITE)
+        highscore = self.normal_font.render('Highscore: ' + str(self.best_score), True, WHITE)
+        size = self.normal_font.render('Size: ' + str(self.rows) + 'x' + str(self.columns), True, WHITE)
+        mps = self.normal_font.render('MPS: ' + str(self.mps), True, WHITE)
+        start = self.normal_font.render('Press Space', True, WHITE)
+
         if self.alive:
             self.current_time = time.time()
-        timer = normal_font.render('Timer: ' + str(round(self.current_time - self.start_time, 1)), True, WHITE)
-        screen.blit(title, (menu_start + (screen.get_width() - menu_start) / 2 - title.get_width() / 2, screen.get_height() * (1/15) - title.get_height()/2))
-        screen.blit(score, (menu_start + (screen.get_width() - menu_start) / 7, screen.get_height() * (3/15) - score.get_height()/2 ))
-        screen.blit(highscore, (menu_start + (screen.get_width() - menu_start) / 7, screen.get_height() * (4/15) - highscore.get_height()/2 ))
-        screen.blit(size, (menu_start + (screen.get_width() - menu_start) / 7, screen.get_height() * (5/15) - size.get_height()/2))
-        screen.blit(mps, (menu_start + (screen.get_width() - menu_start) / 7, screen.get_height() * (6/15) - mps.get_height()/2))
+
+        timer = self.normal_font.render('Timer: ' + str(round(self.current_time - self.start_time, 1)), True, WHITE)
+        self.screen.blit(title, (menu_start + (width - menu_start) / 2 - title.get_width() / 2, height * (1/15) - title.get_height()/2))
+        self.screen.blit(score, (menu_start + (width - menu_start) / 7, height * (3/15) - score.get_height()/2 ))
+        self.screen.blit(highscore, (menu_start + (width - menu_start) / 7, height * (4/15) - highscore.get_height()/2 ))
+        self.screen.blit(size, (menu_start + (width - menu_start) / 7, height * (5/15) - size.get_height()/2))
+        self.screen.blit(mps, (menu_start + (width - menu_start) / 7, height * (6/15) - mps.get_height()/2))
+
         if not self.alive:
-            screen.blit(start, (menu_start + (width - menu_start) / 2 - start.get_width() / 2, height / 2 - start.get_height() / 2))
-        screen.blit(timer, (menu_start + (screen.get_width() - menu_start) / 7, height - timer.get_height()))
+            self.screen.blit(start, (menu_start + (width - menu_start) / 2 - start.get_width() / 2, height / 2 - start.get_height() / 2))
+
+        self.screen.blit(timer, (menu_start + (width - menu_start) / 7, height - timer.get_height()))
         pygame.display.flip()
 
+
+class TrainingSnakeGame(SnakeGame):
+    def __init__(self, learning_agent):
+        super(TrainingSnakeGame, self).__init__()
+        self.learning_agent = learning_agent
+
+    def next_tick(self):
+        if self.is_alive():
+            self.set_next_move(self.learning_agent.chose_next_move(self.get_state()))
+
 def main():
-    #initializing pygame
-    pygame.init()
-    pygame.font.init()
-    screen = pygame.display.set_mode((900, 600), pygame.RESIZABLE)
-    pygame.display.set_caption(TITLE)
-    title_font = pygame.font.Font('./Fonts/Mario-Kart-DS.ttf', 40)
-    normal_font = pygame.font.Font('./Fonts/Fipps-Regular.otf', 20)
-    clock = pygame.time.Clock()
+    class IAExample:
+        def __init__(self):
+            self.moves = [RIGHT, DOWN, LEFT, UP]
+            self.i = 0
 
-    #initializing game
-    game = Game()
+        def chose_next_move(self, state):
+            grid, score, alive = state
+            self.i += 1
+            return self.moves[self.i % len(self.moves)]
 
-    #game loop
-    frame = 0
+
+    agent = IAExample()  # None for interactive GUI
+
+    #
+    # Playing with trained AI example
+    #
+    game = GUISnakeGame()
+
+    # initializing pygame
+    game.init_pygame()
+
+    # game loop
     while game.is_running():
-        #triggering an event
-        for event in pygame.event.get():
-            #closing the game
-            if event.type == pygame.QUIT:
-                game.stop_running()
-            elif event.type == pygame.KEYDOWN:
-                if not game.is_alive():
-                    #start the run
-                    if event.key == pygame.K_SPACE:
-                        game.start_run()
+        game.next_tick(agent)
 
-                    #modify speed
-                    elif event.key == pygame.K_u:
-                        game.slowdown()
-                    elif event.key == pygame.K_i:
-                        game.speedup()
+    game.cleanup_pygame()
 
-                    #modify grid
-                    elif event.key == pygame.K_r:
-                        game.reset_grid()
-                    elif event.key == pygame.K_o:
-                        game.expand_row()
-                    elif event.key == pygame.K_p:
-                        game.expand_column()
-                    elif event.key == pygame.K_l:
-                        game.shrink_row()
-                    elif event.key == pygame.K_SEMICOLON:
-                        game.shrink_column()
-
-                if game.is_alive():
-                    #controls snake
-                    if event.key == pygame.K_UP:
-                        game.set_next_move(UP)
-                    elif event.key == pygame.K_RIGHT:
-                        game.set_next_move(RIGHT)
-                    elif event.key == pygame.K_DOWN:
-                        game.set_next_move(DOWN)
-                    elif event.key == pygame.K_LEFT:
-                        game.set_next_move(LEFT)
-
-            #resize window
-            elif event.type == pygame.VIDEORESIZE:
-                new_width, new_height = event.w, event.h
-                screen = pygame.display.set_mode((new_width, new_height), pygame.RESIZABLE)
-                ratio = min(new_width/900, new_height/600)
-                title_font = pygame.font.Font('./Fonts/Mario-Kart-DS.ttf', round(40 * ratio))
-                normal_font = pygame.font.Font('./Fonts/Fipps-Regular.otf', round(20 * ratio))
-            if not game.is_alive():
-                #left click
-                if pygame.mouse.get_pressed()[0]:
-                    pos = pygame.mouse.get_pos()
-                    game.add_wall(screen, pos)
-                #right click
-                if pygame.mouse.get_pressed()[2]:
-                    pos = pygame.mouse.get_pos()
-                    game.remove(screen, pos)
-        if game.is_alive() and frame/FPS >= 1/game.get_mps():
-            game.move_snake()
-            frame = 0
-        #drawing on screen
-        game.draw(screen, title_font, normal_font)
-        clock.tick(FPS)
-        frame = frame + 1
-    pygame.font.quit()
-    pygame.quit()
+    #
+    # Training AI example
+    #
+    game = TrainingSnakeGame(agent)
+    game.start_run()
+    while game.is_running():
+        game.next_tick()
 
 if __name__ == '__main__':
     main()
