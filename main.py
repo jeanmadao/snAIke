@@ -179,7 +179,7 @@ class SnakeGame:
             return self.get_state()
 
     def get_state(self):
-        return self.grid, self.score, self.alive
+        return self.grid[:self.rows][:self.columns], self.score, self.alive
 
     def get_grid_base(self, width, height):
         menu_start = width * 2/3
@@ -287,7 +287,7 @@ class GUISnakeGame(SnakeGame):
                     self.remove(pos)
 
         if self.is_alive() and learning_agent is not None:
-            self.set_next_move(learning_agent.chose_next_move(self.get_state()))
+            self.set_next_move(learning_agent.choose_next_move(self.get_state()))
 
     def init_pygame(self):
         pygame.init()
@@ -367,7 +367,20 @@ class TrainingSnakeGame(SnakeGame):
 
     def next_tick(self):
         if self.is_alive():
-            self.set_next_move(self.learning_agent.chose_next_move(self.get_state()))
+            self.set_next_move(self.learning_agent.choose_next_move(self.get_state()))
+            return self.move_snake()
+        return self.get_state()
+
+def display_state_console20x20(state):
+    grid, score, alive = state
+    print("Alive: " + str(alive) + " -- Current reward: " + str(score))
+
+    print("  A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T")
+    c = ord('A')
+    for line in grid[:20]:
+        print(" |" + "-+" * 20)
+        print(chr(c) + "|" + "|".join(line[:20]))
+        c += 1
 
 def main():
     class IAExample:
@@ -375,7 +388,7 @@ def main():
             self.moves = [RIGHT, DOWN, LEFT, UP]
             self.i = 0
 
-        def chose_next_move(self, state):
+        def choose_next_move(self, state):
             grid, score, alive = state
             self.i += 1
             return self.moves[self.i % len(self.moves)]
@@ -402,7 +415,7 @@ def main():
     #
     game = TrainingSnakeGame(agent)
     game.start_run()
-    while game.is_running():
+    while game.is_alive():
         game.next_tick()
 
 if __name__ == '__main__':
