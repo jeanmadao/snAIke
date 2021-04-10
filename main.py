@@ -179,7 +179,7 @@ class SnakeGame:
             return self.get_state()
 
     def get_state(self):
-        return self.grid[:self.rows][:self.columns], self.score, self.alive
+        return self.grid[:self.rows][:self.columns], self.score, self.alive, self.snake[0]
 
     def get_grid_base(self, width, height):
         menu_start = width * 2/3
@@ -369,10 +369,11 @@ class TrainingSnakeGame(SnakeGame):
         if self.is_alive():
             self.set_next_move(self.learning_agent.choose_next_move(self.get_state()))
             return self.move_snake()
+
         return self.get_state()
 
 def display_state_console20x20(state):
-    grid, score, alive = state
+    grid, score, alive, head = state
     print("Alive: " + str(alive) + " -- Current reward: " + str(score))
 
     print("  A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T")
@@ -389,7 +390,7 @@ def main():
             self.i = 0
 
         def choose_next_move(self, state):
-            grid, score, alive = state
+            grid, score, alive, head = state
             self.i += 1
             return self.moves[self.i % len(self.moves)]
 
